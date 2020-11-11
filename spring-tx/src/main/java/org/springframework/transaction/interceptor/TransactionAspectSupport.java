@@ -21,10 +21,12 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentMap;
 
 import io.vavr.control.Try;
-import kotlin.reflect.KFunction;
-import kotlin.reflect.jvm.ReflectJvmMapping;
+import kotlin.coroutines.Continuation;
+import kotlinx.coroutines.reactive.AwaitKt;
+import kotlinx.coroutines.reactive.ReactiveFlowKt;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -33,6 +35,7 @@ import org.springframework.beans.factory.BeanFactoryAware;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.beans.factory.annotation.BeanFactoryAnnotationUtils;
 import org.springframework.core.KotlinDetector;
+import org.springframework.core.MethodParameter;
 import org.springframework.core.NamedThreadLocal;
 import org.springframework.core.ReactiveAdapter;
 import org.springframework.core.ReactiveAdapterRegistry;
@@ -44,7 +47,6 @@ import org.springframework.transaction.ReactiveTransactionManager;
 import org.springframework.transaction.TransactionManager;
 import org.springframework.transaction.TransactionStatus;
 import org.springframework.transaction.TransactionSystemException;
-import org.springframework.transaction.TransactionUsageException;
 import org.springframework.transaction.reactive.TransactionContextManager;
 import org.springframework.transaction.support.CallbackPreferringPlatformTransactionManager;
 import org.springframework.util.Assert;
@@ -78,6 +80,7 @@ import org.springframework.util.StringUtils;
  * @author Stéphane Nicoll
  * @author Sam Brannen
  * @author Mark Paluch
+ * @author Sebastien Deleuze
  * @since 1.1
  * @see PlatformTransactionManager
  * @see ReactiveTransactionManager
@@ -95,6 +98,8 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 	 * Key to use to store the default transaction manager.
 	 */
 	private static final Object DEFAULT_TRANSACTION_MANAGER_KEY = new Object();
+
+	private static final String COROUTINES_FLOW_CLASS_NAME = "kotlinx.coroutines.flow.Flow";
 
 	/**
 	 * Vavr library present on the classpath?
@@ -336,21 +341,20 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 		final TransactionManager tm = determineTransactionManager(txAttr);
 
 		if (this.reactiveAdapterRegistry != null && tm instanceof ReactiveTransactionManager) {
+			boolean isSuspendingFunction = KotlinDetector.isSuspendingFunction(method);
+			boolean hasSuspendingFlowReturnType = isSuspendingFunction && COROUTINES_FLOW_CLASS_NAME.equals(new MethodParameter(method, -1).getParameterType().getName());
 			ReactiveTransactionSupport txSupport = this.transactionSupportCache.computeIfAbsent(method, key -> {
-				if (KotlinDetector.isKotlinType(method.getDeclaringClass()) && KotlinDelegate.isSuspend(method)) {
-					throw new TransactionUsageException(
-							"Unsupported annotated transaction on suspending function detected: " + method +
-							". Use TransactionalOperator.transactional extensions instead.");
-				}
-				ReactiveAdapter adapter = this.reactiveAdapterRegistry.getAdapter(method.getReturnType());
+				Class<?> reactiveType = (isSuspendingFunction ? (hasSuspendingFlowReturnType ? Flux.class : Mono.class) : method.getReturnType());
+				ReactiveAdapter adapter = this.reactiveAdapterRegistry.getAdapter(reactiveType);
 				if (adapter == null) {
 					throw new IllegalStateException("Cannot apply reactive transaction to non-reactive return type: " +
 							method.getReturnType());
 				}
 				return new ReactiveTransactionSupport(adapter);
 			});
-			return txSupport.invokeWithinTransaction(
-					method, targetClass, invocation, txAttr, (ReactiveTransactionManager) tm);
+			Object result = txSupport.invokeWithinTransaction(method, targetClass, invocation, txAttr, (ReactiveTransactionManager) tm);
+			return (isSuspendingFunction ? (hasSuspendingFlowReturnType ? KotlinDelegate.asFlow((Publisher<?>) result) :
+					KotlinDelegate.awaitSingleOrNull((Publisher<?>) result, ((CoroutinesInvocationCallback) invocation).getContinuation())) : result);
 		}
 
 		PlatformTransactionManager ptm = asPlatformTransactionManager(tm);
@@ -388,11 +392,12 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 		}
 
 		else {
+			Object result;
 			final ThrowableHolder throwableHolder = new ThrowableHolder();
 
 			// It's a CallbackPreferringPlatformTransactionManager: pass a TransactionCallback in.
 			try {
-				Object result = ((CallbackPreferringPlatformTransactionManager) ptm).execute(txAttr, status -> {
+				result = ((CallbackPreferringPlatformTransactionManager) ptm).execute(txAttr, status -> {
 					TransactionInfo txInfo = prepareTransactionInfo(ptm, txAttr, joinpointIdentification, status);
 					try {
 						Object retVal = invocation.proceedWithInvocation();
@@ -422,12 +427,6 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 						cleanupTransactionInfo(txInfo);
 					}
 				});
-
-				// Check result state: It might indicate a Throwable to rethrow.
-				if (throwableHolder.throwable != null) {
-					throw throwableHolder.throwable;
-				}
-				return result;
 			}
 			catch (ThrowableHolderException ex) {
 				throw ex.getCause();
@@ -445,11 +444,17 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 				}
 				throw ex2;
 			}
+
+			// Check result state: It might indicate a Throwable to rethrow.
+			if (throwableHolder.throwable != null) {
+				throw throwableHolder.throwable;
+			}
+			return result;
 		}
 	}
 
 	/**
-	 * Clear the cache.
+	 * Clear the transaction manager cache.
 	 */
 	protected void clearTransactionManagerCache() {
 		this.transactionManagerCache.clear();
@@ -784,6 +789,11 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 		Object proceedWithInvocation() throws Throwable;
 	}
 
+	protected interface CoroutinesInvocationCallback extends InvocationCallback {
+
+		Object getContinuation();
+	}
+
 
 	/**
 	 * Internal holder class for a Throwable in a callback transaction model.
@@ -836,9 +846,14 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 	 */
 	private static class KotlinDelegate {
 
-		static private boolean isSuspend(Method method) {
-			KFunction<?> function = ReflectJvmMapping.getKotlinFunction(method);
-			return function != null && function.isSuspend();
+		private static Object asFlow(Publisher<?> publisher) {
+			return ReactiveFlowKt.asFlow(publisher);
+		}
+
+		@SuppressWarnings("unchecked")
+		@Nullable
+		private static Object awaitSingleOrNull(Publisher<?> publisher, Object continuation) {
+			return AwaitKt.awaitSingleOrNull(publisher, (Continuation<Object>) continuation);
 		}
 	}
 
@@ -860,8 +875,8 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 
 			String joinpointIdentification = methodIdentification(method, targetClass, txAttr);
 
-			// Optimize for Mono
-			if (Mono.class.isAssignableFrom(method.getReturnType())) {
+			// For Mono and suspending functions not returning kotlinx.coroutines.flow.Flow
+			if (Mono.class.isAssignableFrom(method.getReturnType()) || (KotlinDetector.isSuspendingFunction(method) && !COROUTINES_FLOW_CLASS_NAME.equals(new MethodParameter(method, -1).getParameterType().getName()))) {
 				return TransactionContextManager.currentContext().flatMap(context ->
 						createTransactionIfNecessary(rtm, txAttr, joinpointIdentification).flatMap(it -> {
 							try {
@@ -878,7 +893,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 										},
 										this::commitTransactionAfterReturning,
 										(txInfo, err) -> Mono.empty(),
-										this::commitTransactionAfterReturning)
+										this::rollbackTransactionOnCancel)
 										.onErrorResume(ex ->
 												completeTransactionAfterThrowing(it, ex).then(Mono.error(ex)));
 							}
@@ -886,8 +901,8 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 								// target invocation exception
 								return completeTransactionAfterThrowing(it, ex).then(Mono.error(ex));
 							}
-						})).subscriberContext(TransactionContextManager.getOrCreateContext())
-						.subscriberContext(TransactionContextManager.getOrCreateContextHolder());
+						})).contextWrite(TransactionContextManager.getOrCreateContext())
+						.contextWrite(TransactionContextManager.getOrCreateContextHolder());
 			}
 
 			// Any other reactive type, typically a Flux
@@ -908,7 +923,7 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 											},
 											this::commitTransactionAfterReturning,
 											(txInfo, ex) -> Mono.empty(),
-											this::commitTransactionAfterReturning)
+											this::rollbackTransactionOnCancel)
 									.onErrorResume(ex ->
 											completeTransactionAfterThrowing(it, ex).then(Mono.error(ex)));
 						}
@@ -916,8 +931,8 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 							// target invocation exception
 							return completeTransactionAfterThrowing(it, ex).then(Mono.error(ex));
 						}
-					})).subscriberContext(TransactionContextManager.getOrCreateContext())
-					.subscriberContext(TransactionContextManager.getOrCreateContextHolder()));
+					})).contextWrite(TransactionContextManager.getOrCreateContext())
+					.contextWrite(TransactionContextManager.getOrCreateContextHolder()));
 		}
 
 		@SuppressWarnings("serial")
@@ -971,6 +986,16 @@ public abstract class TransactionAspectSupport implements BeanFactoryAware, Init
 					logger.trace("Completing transaction for [" + txInfo.getJoinpointIdentification() + "]");
 				}
 				return txInfo.getTransactionManager().commit(txInfo.getReactiveTransaction());
+			}
+			return Mono.empty();
+		}
+
+		private Mono<Void> rollbackTransactionOnCancel(@Nullable ReactiveTransactionInfo txInfo) {
+			if (txInfo != null && txInfo.getReactiveTransaction() != null) {
+				if (logger.isTraceEnabled()) {
+					logger.trace("Rolling back transaction for [" + txInfo.getJoinpointIdentification() + "] after cancellation");
+				}
+				return txInfo.getTransactionManager().rollback(txInfo.getReactiveTransaction());
 			}
 			return Mono.empty();
 		}

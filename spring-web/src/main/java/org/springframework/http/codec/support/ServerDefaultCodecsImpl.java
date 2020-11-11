@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.springframework.http.codec.support;
 
 import java.util.List;
@@ -22,9 +23,9 @@ import org.springframework.http.codec.HttpMessageReader;
 import org.springframework.http.codec.HttpMessageWriter;
 import org.springframework.http.codec.ServerCodecConfigurer;
 import org.springframework.http.codec.ServerSentEventHttpMessageWriter;
+import org.springframework.http.codec.multipart.DefaultPartHttpMessageReader;
 import org.springframework.http.codec.multipart.MultipartHttpMessageReader;
 import org.springframework.http.codec.multipart.PartHttpMessageWriter;
-import org.springframework.http.codec.multipart.SynchronossPartHttpMessageReader;
 import org.springframework.lang.Nullable;
 
 /**
@@ -68,11 +69,9 @@ class ServerDefaultCodecsImpl extends BaseDefaultCodecs implements ServerCodecCo
 			addCodec(typedReaders, this.multipartReader);
 			return;
 		}
-		if (synchronossMultipartPresent) {
-			SynchronossPartHttpMessageReader partReader = new SynchronossPartHttpMessageReader();
-			addCodec(typedReaders, partReader);
-			addCodec(typedReaders, new MultipartHttpMessageReader(partReader));
-		}
+		DefaultPartHttpMessageReader partReader = new DefaultPartHttpMessageReader();
+		addCodec(typedReaders, partReader);
+		addCodec(typedReaders, new MultipartHttpMessageReader(partReader));
 	}
 
 	@Override
@@ -87,7 +86,10 @@ class ServerDefaultCodecsImpl extends BaseDefaultCodecs implements ServerCodecCo
 
 	@Nullable
 	private Encoder<?> getSseEncoder() {
-		return this.sseEncoder != null ? this.sseEncoder : jackson2Present ? getJackson2JsonEncoder() : null;
+		return this.sseEncoder != null ? this.sseEncoder :
+				jackson2Present ? getJackson2JsonEncoder() :
+				kotlinSerializationJsonPresent ? getKotlinSerializationJsonEncoder() :
+				null;
 	}
 
 }

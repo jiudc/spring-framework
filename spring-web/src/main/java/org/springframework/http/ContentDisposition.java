@@ -34,7 +34,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import static java.time.format.DateTimeFormatter.RFC_1123_DATE_TIME;
 
 /**
- * Represent the Content-Disposition type and parameters as defined in RFC 6266.
+ * Representation of the Content-Disposition type and parameters as defined in RFC 6266.
  *
  * @author Sebastien Deleuze
  * @author Juergen Hoeller
@@ -93,8 +93,34 @@ public final class ContentDisposition {
 
 
 	/**
-	 * Return the disposition type, like for example {@literal inline}, {@literal attachment},
-	 * {@literal form-data}, or {@code null} if not defined.
+	 * Return whether the {@link #getType() type} is {@literal "attachment"}.
+	 * @since 5.3
+	 */
+	public boolean isAttachment() {
+		return (this.type != null && this.type.equalsIgnoreCase("attachment"));
+	}
+
+	/**
+	 * Return whether the {@link #getType() type} is {@literal "form-data"}.
+	 * @since 5.3
+	 */
+	public boolean isFormData() {
+		return (this.type != null && this.type.equalsIgnoreCase("form-data"));
+	}
+
+	/**
+	 * Return whether the {@link #getType() type} is {@literal "inline"}.
+	 * @since 5.3
+	 */
+	public boolean isInline() {
+		return (this.type != null && this.type.equalsIgnoreCase("inline"));
+	}
+
+	/**
+	 * Return the disposition type.
+	 * @see #isAttachment()
+	 * @see #isFormData()
+	 * @see #isInline()
 	 */
 	@Nullable
 	public String getType() {
@@ -129,7 +155,7 @@ public final class ContentDisposition {
 	/**
 	 * Return the value of the {@literal size} parameter, or {@code null} if not defined.
 	 * @deprecated since 5.2.3 as per
-	 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Apendix B</a>,
+	 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Appendix B</a>,
 	 * to be removed in a future release.
 	 */
 	@Deprecated
@@ -141,7 +167,7 @@ public final class ContentDisposition {
 	/**
 	 * Return the value of the {@literal creation-date} parameter, or {@code null} if not defined.
 	 * @deprecated since 5.2.3 as per
-	 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Apendix B</a>,
+	 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Appendix B</a>,
 	 * to be removed in a future release.
 	 */
 	@Deprecated
@@ -153,7 +179,7 @@ public final class ContentDisposition {
 	/**
 	 * Return the value of the {@literal modification-date} parameter, or {@code null} if not defined.
 	 * @deprecated since 5.2.3 as per
-	 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Apendix B</a>,
+	 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Appendix B</a>,
 	 * to be removed in a future release.
 	 */
 	@Deprecated
@@ -165,7 +191,7 @@ public final class ContentDisposition {
 	/**
 	 * Return the value of the {@literal read-date} parameter, or {@code null} if not defined.
 	 * @deprecated since 5.2.3 as per
-	 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Apendix B</a>,
+	 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Appendix B</a>,
 	 * to be removed in a future release.
 	 */
 	@Deprecated
@@ -173,7 +199,6 @@ public final class ContentDisposition {
 	public ZonedDateTime getReadDate() {
 		return this.readDate;
 	}
-
 
 	@Override
 	public boolean equals(@Nullable Object other) {
@@ -253,6 +278,30 @@ public final class ContentDisposition {
 		return sb.toString();
 	}
 
+
+	/**
+	 * Return a builder for a {@code ContentDisposition} of type {@literal "attachment"}.
+	 * @since 5.3
+	 */
+	public static Builder attachment() {
+		return builder("attachment");
+	}
+
+	/**
+	 * Return a builder for a {@code ContentDisposition} of type {@literal "form-data"}.
+	 * @since 5.3
+	 */
+	public static Builder formData() {
+		return builder("form-data");
+	}
+
+	/**
+	 * Return a builder for a {@code ContentDisposition} of type {@literal "inline"}.
+	 * @since 5.3
+	 */
+	public static Builder inline() {
+		return builder("inline");
+	}
 
 	/**
 	 * Return a builder for a {@code ContentDisposition}.
@@ -520,7 +569,7 @@ public final class ContentDisposition {
 		/**
 		 * Set the value of the {@literal size} parameter.
 		 * @deprecated since 5.2.3 as per
-		 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Apendix B</a>,
+		 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Appendix B</a>,
 		 * to be removed in a future release.
 		 */
 		@Deprecated
@@ -529,7 +578,7 @@ public final class ContentDisposition {
 		/**
 		 * Set the value of the {@literal creation-date} parameter.
 		 * @deprecated since 5.2.3 as per
-		 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Apendix B</a>,
+		 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Appendix B</a>,
 		 * to be removed in a future release.
 		 */
 		@Deprecated
@@ -538,7 +587,7 @@ public final class ContentDisposition {
 		/**
 		 * Set the value of the {@literal modification-date} parameter.
 		 * @deprecated since 5.2.3 as per
-		 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Apendix B</a>,
+		 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Appendix B</a>,
 		 * to be removed in a future release.
 		 */
 		@Deprecated
@@ -547,7 +596,7 @@ public final class ContentDisposition {
 		/**
 		 * Set the value of the {@literal read-date} parameter.
 		 * @deprecated since 5.2.3 as per
-		 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Apendix B</a>,
+		 * <a href="https://tools.ietf.org/html/rfc6266#appendix-B">RFC 6266, Appendix B</a>,
 		 * to be removed in a future release.
 		 */
 		@Deprecated
@@ -562,7 +611,7 @@ public final class ContentDisposition {
 
 	private static class BuilderImpl implements Builder {
 
-		private String type;
+		private final String type;
 
 		@Nullable
 		private String name;
@@ -612,24 +661,28 @@ public final class ContentDisposition {
 		}
 
 		@Override
+		@SuppressWarnings("deprecation")
 		public Builder size(Long size) {
 			this.size = size;
 			return this;
 		}
 
 		@Override
+		@SuppressWarnings("deprecation")
 		public Builder creationDate(ZonedDateTime creationDate) {
 			this.creationDate = creationDate;
 			return this;
 		}
 
 		@Override
+		@SuppressWarnings("deprecation")
 		public Builder modificationDate(ZonedDateTime modificationDate) {
 			this.modificationDate = modificationDate;
 			return this;
 		}
 
 		@Override
+		@SuppressWarnings("deprecation")
 		public Builder readDate(ZonedDateTime readDate) {
 			this.readDate = readDate;
 			return this;

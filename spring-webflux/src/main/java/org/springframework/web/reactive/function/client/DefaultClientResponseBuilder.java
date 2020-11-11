@@ -186,7 +186,7 @@ final class DefaultClientResponseBuilder implements ClientResponse.Builder {
 		this.body = Flux.just(body).
 				map(s -> {
 					byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
-					return new DefaultDataBufferFactory().wrap(bytes);
+					return DefaultDataBufferFactory.sharedInstance.wrap(bytes);
 				});
 		return this;
 	}
@@ -208,8 +208,10 @@ final class DefaultClientResponseBuilder implements ClientResponse.Builder {
 		ClientHttpResponse httpResponse = new BuiltClientHttpResponse(
 				this.statusCode, this.headers, this.cookies, this.body, this.originalResponse);
 
-		return new DefaultClientResponse(
-				httpResponse, this.strategies, "", "", () -> this.request);
+		return new DefaultClientResponse(httpResponse, this.strategies,
+				this.originalResponse != null ? this.originalResponse.logPrefix() : "",
+				this.request.getMethodValue() + " " + this.request.getURI(),
+				() -> this.request);
 	}
 
 

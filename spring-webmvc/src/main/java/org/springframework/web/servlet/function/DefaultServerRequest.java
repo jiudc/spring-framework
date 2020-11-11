@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.springframework.web.servlet.function;
 
 import java.io.IOException;
@@ -52,7 +51,7 @@ import org.springframework.http.HttpRange;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.GenericHttpMessageConverter;
 import org.springframework.http.converter.HttpMessageConverter;
-import org.springframework.http.server.PathContainer;
+import org.springframework.http.server.RequestPath;
 import org.springframework.http.server.ServletServerHttpRequest;
 import org.springframework.lang.Nullable;
 import org.springframework.util.CollectionUtils;
@@ -62,10 +61,9 @@ import org.springframework.util.ObjectUtils;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.context.request.ServletWebRequest;
 import org.springframework.web.context.request.WebRequest;
-import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.util.ServletRequestPathUtils;
 import org.springframework.web.util.UriBuilder;
-import org.springframework.web.util.UrlPathHelper;
 
 /**
  * {@code ServerRequest} implementation based on a {@link HttpServletRequest}.
@@ -77,7 +75,7 @@ class DefaultServerRequest implements ServerRequest {
 
 	private final ServletServerHttpRequest serverHttpRequest;
 
-	private final PathContainer pathContainer;
+	private final RequestPath requestPath;
 
 	private final Headers headers;
 
@@ -102,7 +100,11 @@ class DefaultServerRequest implements ServerRequest {
 		this.params = CollectionUtils.toMultiValueMap(new ServletParametersMap(servletRequest));
 		this.attributes = new ServletAttributesMap(servletRequest);
 
-		this.pathContainer = PathContainer.parsePath(path());
+		// DispatcherServlet parses the path but for other scenarios (e.g. tests) we might need to
+
+		this.requestPath = (ServletRequestPathUtils.hasParsedRequestPath(servletRequest) ?
+				ServletRequestPathUtils.getParsedRequestPath(servletRequest) :
+				ServletRequestPathUtils.parseAndCache(servletRequest));
 	}
 
 	private static List<MediaType> allSupportedMediaTypes(List<HttpMessageConverter<?>> messageConverters) {
@@ -129,17 +131,8 @@ class DefaultServerRequest implements ServerRequest {
 	}
 
 	@Override
-	public String path() {
-		String path = (String) servletRequest().getAttribute(HandlerMapping.LOOKUP_PATH);
-		if (path == null) {
-			path = UrlPathHelper.defaultInstance.getLookupPathForRequest(servletRequest());
-		}
-		return path;
-	}
-
-	@Override
-	public PathContainer pathContainer() {
-		return this.pathContainer;
+	public RequestPath requestPath() {
+		return this.requestPath;
 	}
 
 	@Override
