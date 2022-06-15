@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,6 +47,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 import reactor.core.publisher.SynchronousSink;
+import reactor.util.context.Context;
 
 import org.springframework.core.io.Resource;
 import org.springframework.lang.Nullable;
@@ -71,7 +72,7 @@ public abstract class DataBufferUtils {
 	//---------------------------------------------------------------------
 
 	/**
-	 * Obtain a {@link InputStream} from the given supplier, and read it into a
+	 * Obtain an {@link InputStream} from the given supplier, and read it into a
 	 * {@code Flux} of {@code DataBuffer}s. Closes the input stream when the
 	 * Flux is terminated.
 	 * @param inputStreamSupplier the supplier for the input stream to read from
@@ -125,7 +126,7 @@ public abstract class DataBufferUtils {
 	}
 
 	/**
-	 * Obtain a {@code AsynchronousFileChannel} from the given supplier, and
+	 * Obtain an {@code AsynchronousFileChannel} from the given supplier, and
 	 * read it into a {@code Flux} of {@code DataBuffer}s, starting at the given
 	 * position. Closes the channel when the Flux is terminated.
 	 * @param channelSupplier the supplier for the channel to read from
@@ -479,8 +480,26 @@ public abstract class DataBufferUtils {
 	 */
 	@SuppressWarnings("unchecked")
 	public static <T extends DataBuffer> T retain(T dataBuffer) {
-		if (dataBuffer instanceof PooledDataBuffer) {
-			return (T) ((PooledDataBuffer) dataBuffer).retain();
+		if (dataBuffer instanceof PooledDataBuffer pooledDataBuffer) {
+			return (T) pooledDataBuffer.retain();
+		}
+		else {
+			return dataBuffer;
+		}
+	}
+
+	/**
+	 * Associate the given hint with the data buffer if it is a pooled buffer
+	 * and supports leak tracking.
+	 * @param dataBuffer the data buffer to attach the hint to
+	 * @param hint the hint to attach
+	 * @return the input buffer
+	 * @since 5.3.2
+	 */
+	@SuppressWarnings("unchecked")
+	public static <T extends DataBuffer> T touch(T dataBuffer, Object hint) {
+		if (dataBuffer instanceof PooledDataBuffer pooledDataBuffer) {
+			return (T) pooledDataBuffer.touch(hint);
 		}
 		else {
 			return dataBuffer;
@@ -494,8 +513,7 @@ public abstract class DataBufferUtils {
 	 * @return {@code true} if the buffer was released; {@code false} otherwise.
 	 */
 	public static boolean release(@Nullable DataBuffer dataBuffer) {
-		if (dataBuffer instanceof PooledDataBuffer) {
-			PooledDataBuffer pooledDataBuffer = (PooledDataBuffer) dataBuffer;
+		if (dataBuffer instanceof PooledDataBuffer pooledDataBuffer) {
 			if (pooledDataBuffer.isAllocated()) {
 				try {
 					return pooledDataBuffer.release();
@@ -550,12 +568,12 @@ public abstract class DataBufferUtils {
 	 * @throws DataBufferLimitException if maxByteCount is exceeded
 	 * @since 5.1.11
 	 */
-	@SuppressWarnings("unchecked")
+	@SuppressWarnings({ "unchecked", "rawtypes" })
 	public static Mono<DataBuffer> join(Publisher<? extends DataBuffer> buffers, int maxByteCount) {
 		Assert.notNull(buffers, "'dataBuffers' must not be null");
 
-		if (buffers instanceof Mono) {
-			return (Mono<DataBuffer>) buffers;
+		if (buffers instanceof Mono mono) {
+			return mono;
 		}
 
 		return Flux.from(buffers)
@@ -589,15 +607,14 @@ public abstract class DataBufferUtils {
 	}
 
 	private static NestedMatcher createMatcher(byte[] delimiter) {
-		Assert.isTrue(delimiter.length > 0, "Delimiter must not be empty");
-		switch (delimiter.length) {
-			case 1:
-				return (delimiter[0] == 10 ? SingleByteMatcher.NEWLINE_MATCHER : new SingleByteMatcher(delimiter));
-			case 2:
-				return new TwoByteMatcher(delimiter);
-			default:
-				return new KnuthMorrisPrattMatcher(delimiter);
-		}
+		// extract length due to Eclipse IDE compiler error in switch expression
+		int length = delimiter.length;
+		Assert.isTrue(length > 0, "Delimiter must not be empty");
+		return switch (length) {
+			case 1 -> (delimiter[0] == 10 ? SingleByteMatcher.NEWLINE_MATCHER : new SingleByteMatcher(delimiter));
+			case 2 -> new TwoByteMatcher(delimiter);
+			default -> new KnuthMorrisPrattMatcher(delimiter);
+		};
 	}
 
 
@@ -1039,6 +1056,12 @@ public abstract class DataBufferUtils {
 		protected void hookOnComplete() {
 			this.sink.complete();
 		}
+
+		@Override
+		public Context currentContext() {
+			return Context.of(this.sink.contextView());
+		}
+
 	}
 
 
@@ -1130,6 +1153,12 @@ public abstract class DataBufferUtils {
 			this.sink.next(dataBuffer);
 			this.dataBuffer.set(null);
 		}
+
+		@Override
+		public Context currentContext() {
+			return Context.of(this.sink.contextView());
+		}
+
 	}
 
 }

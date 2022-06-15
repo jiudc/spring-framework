@@ -22,7 +22,6 @@ import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -46,6 +45,7 @@ import org.springframework.transaction.interceptor.TransactionAttribute;
 import org.springframework.transaction.interceptor.TransactionAttributeSource;
 import org.springframework.util.Assert;
 import org.springframework.util.ReflectionUtils;
+import org.springframework.util.ReflectionUtils.MethodFilter;
 import org.springframework.util.StringUtils;
 
 /**
@@ -73,10 +73,10 @@ import org.springframework.util.StringUtils;
  * to be run within a transaction that will, by default, be automatically
  * <em>rolled back</em> after completion of the test. If a test class is
  * annotated with {@code @Transactional}, each test method within that class
- * hierarchy will be run within a transaction. Test methods that are
- * <em>not</em> annotated with {@code @Transactional} (at the class or method
- * level) will not be run within a transaction. Furthermore, tests that
- * <em>are</em> annotated with {@code @Transactional} but have the
+ * hierarchy or nested class hierarchy will be run within a transaction. Test
+ * methods that are <em>not</em> annotated with {@code @Transactional} (at the
+ * class or method level) will not be run within a transaction. Furthermore,
+ * tests that <em>are</em> annotated with {@code @Transactional} but have the
  * {@link Transactional#propagation propagation} type set to
  * {@link org.springframework.transaction.annotation.Propagation#NOT_SUPPORTED NOT_SUPPORTED}
  * or {@link org.springframework.transaction.annotation.Propagation#NEVER NEVER}
@@ -462,9 +462,9 @@ public class TransactionalTestExecutionListener extends AbstractTestExecutionLis
 	 * as well as annotated interface default methods
 	 */
 	private List<Method> getAnnotatedMethods(Class<?> clazz, Class<? extends Annotation> annotationType) {
-		return Arrays.stream(ReflectionUtils.getUniqueDeclaredMethods(clazz, ReflectionUtils.USER_DECLARED_METHODS))
-				.filter(method -> AnnotatedElementUtils.hasAnnotation(method, annotationType))
-				.collect(Collectors.toList());
+		MethodFilter methodFilter = ReflectionUtils.USER_DECLARED_METHODS
+				.and(method -> AnnotatedElementUtils.hasAnnotation(method, annotationType));
+		return Arrays.asList(ReflectionUtils.getUniqueDeclaredMethods(clazz, methodFilter));
 	}
 
 }

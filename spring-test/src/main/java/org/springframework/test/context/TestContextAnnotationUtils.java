@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -79,6 +79,25 @@ public abstract class TestContextAnnotationUtils {
 
 
 	/**
+	 * Determine if an annotation of the specified {@code annotationType} is
+	 * present or meta-present on the supplied {@link Class} according to the
+	 * search algorithm used in {@link #findMergedAnnotation(Class, Class)}.
+	 * <p>If this method returns {@code true}, then {@code findMergedAnnotation(...)}
+	 * will return a non-null value.
+	 * @param clazz the class to look for annotations on
+	 * @param annotationType the type of annotation to look for
+	 * @return {@code true} if a matching annotation is present
+	 * @since 5.3.3
+	 * @see #findMergedAnnotation(Class, Class)
+	 */
+	public static boolean hasAnnotation(Class<?> clazz, Class<? extends Annotation> annotationType) {
+		return MergedAnnotations.search(SearchStrategy.TYPE_HIERARCHY)
+				.withEnclosingClasses(TestContextAnnotationUtils::searchEnclosingClass)
+				.from(clazz)
+				.isPresent(annotationType);
+	}
+
+	/**
 	 * Find the first annotation of the specified {@code annotationType} within
 	 * the annotation hierarchy <em>above</em> the supplied class, merge that
 	 * annotation's attributes with <em>matching</em> attributes from annotations
@@ -109,9 +128,11 @@ public abstract class TestContextAnnotationUtils {
 	private static <T extends Annotation> T findMergedAnnotation(Class<?> clazz, Class<T> annotationType,
 			Predicate<Class<?>> searchEnclosingClass) {
 
-		AnnotationDescriptor<T> descriptor =
-				findAnnotationDescriptor(clazz, annotationType, searchEnclosingClass, new HashSet<>());
-		return (descriptor != null ? descriptor.getAnnotation() : null);
+		return MergedAnnotations.search(SearchStrategy.TYPE_HIERARCHY)
+				.withEnclosingClasses(searchEnclosingClass)
+				.from(clazz)
+				.get(annotationType)
+				.synthesize(MergedAnnotation::isPresent).orElse(null);
 	}
 
 	/**

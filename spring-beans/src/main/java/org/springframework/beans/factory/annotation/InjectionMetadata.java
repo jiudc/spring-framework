@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -89,6 +89,14 @@ public class InjectionMetadata {
 
 
 	/**
+	 * Return the {@link InjectedElement elements} to inject.
+	 * @return the elements to inject
+	 */
+	public Collection<InjectedElement> getInjectedElements() {
+		return Collections.unmodifiableCollection(this.injectedElements);
+	}
+
+	/**
 	 * Determine whether this metadata instance needs to be refreshed.
 	 * @param clazz the current target class
 	 * @return {@code true} indicating a refresh, {@code false} otherwise
@@ -141,8 +149,7 @@ public class InjectionMetadata {
 	 * Return an {@code InjectionMetadata} instance, possibly for empty elements.
 	 * @param elements the elements to inject (possibly empty)
 	 * @param clazz the target class
-	 * @return a new {@link #InjectionMetadata(Class, Collection)} instance,
-	 * or {@link #EMPTY} in case of no elements
+	 * @return a new {@link #InjectionMetadata(Class, Collection)} instance
 	 * @since 5.2
 	 */
 	public static InjectionMetadata forElements(Collection<InjectedElement> elements, Class<?> clazz) {
@@ -305,10 +312,9 @@ public class InjectionMetadata {
 			if (this == other) {
 				return true;
 			}
-			if (!(other instanceof InjectedElement)) {
+			if (!(other instanceof InjectedElement otherElement)) {
 				return false;
 			}
-			InjectedElement otherElement = (InjectedElement) other;
 			return this.member.equals(otherElement.member);
 		}
 

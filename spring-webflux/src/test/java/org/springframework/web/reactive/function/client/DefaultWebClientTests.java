@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2021 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,14 +30,18 @@ import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.reactivestreams.Publisher;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
 
 import org.springframework.core.NamedThreadLocal;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ClientCodecConfigurer;
+import org.springframework.web.reactive.function.BodyExtractors;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
@@ -70,6 +74,7 @@ public class DefaultWebClientTests {
 	@BeforeEach
 	public void setup() {
 		ClientResponse mockResponse = mock(ClientResponse.class);
+		when(mockResponse.statusCode()).thenReturn(HttpStatus.OK);
 		when(mockResponse.bodyToMono(Void.class)).thenReturn(Mono.empty());
 		given(this.exchangeFunction.exchange(this.captor.capture())).willReturn(Mono.just(mockResponse));
 		this.builder = WebClient.builder().baseUrl("/base").exchangeFunction(this.exchangeFunction);
@@ -130,6 +135,7 @@ public class DefaultWebClientTests {
 	}
 
 	@Test
+	@SuppressWarnings("deprecation")
 	public void contextFromThreadLocal() {
 		WebClient client = this.builder
 				.filter((request, next) ->
@@ -410,8 +416,8 @@ public class DefaultWebClientTests {
 		Mono<Void> result = this.builder.build().get()
 				.uri("/path")
 				.retrieve()
-				.onStatus(HttpStatus::is4xxClientError, resp -> Mono.error(new IllegalStateException("1")))
-				.onStatus(HttpStatus::is4xxClientError, resp -> Mono.error(new IllegalStateException("2")))
+				.onStatus(HttpStatusCode::is4xxClientError, resp -> Mono.error(new IllegalStateException("1")))
+				.onStatus(HttpStatusCode::is4xxClientError, resp -> Mono.error(new IllegalStateException("2")))
 				.bodyToMono(Void.class);
 
 		StepVerifier.create(result).expectErrorMessage("1").verify();
@@ -424,8 +430,8 @@ public class DefaultWebClientTests {
 		ClientResponse response = ClientResponse.create(HttpStatus.BAD_REQUEST).build();
 		given(exchangeFunction.exchange(any())).willReturn(Mono.just(response));
 
-		Predicate<HttpStatus> predicate1 = mock(Predicate.class);
-		Predicate<HttpStatus> predicate2 = mock(Predicate.class);
+		Predicate<HttpStatusCode> predicate1 = mock(Predicate.class);
+		Predicate<HttpStatusCode> predicate2 = mock(Predicate.class);
 
 		given(predicate1.test(HttpStatus.BAD_REQUEST)).willReturn(false);
 		given(predicate2.test(HttpStatus.BAD_REQUEST)).willReturn(false);
@@ -442,6 +448,28 @@ public class DefaultWebClientTests {
 		verify(predicate1).test(HttpStatus.BAD_REQUEST);
 		verify(predicate2).test(HttpStatus.BAD_REQUEST);
 	}
+
+	@Test // gh-26069
+	public void onStatusHandlersApplyForToEntityMethods() {
+
+		ClientResponse response = ClientResponse.create(HttpStatus.BAD_REQUEST).build();
+		given(exchangeFunction.exchange(any())).willReturn(Mono.just(response));
+
+		WebClient.ResponseSpec spec = this.builder.build().get().uri("/path").retrieve();
+
+		testStatusHandlerForToEntity(spec.toEntity(String.class));
+		testStatusHandlerForToEntity(spec.toEntity(new ParameterizedTypeReference<String>() {}));
+		testStatusHandlerForToEntity(spec.toEntityList(String.class));
+		testStatusHandlerForToEntity(spec.toEntityList(new ParameterizedTypeReference<String>() {}));
+		testStatusHandlerForToEntity(spec.toEntityFlux(String.class));
+		testStatusHandlerForToEntity(spec.toEntityFlux(new ParameterizedTypeReference<String>() {}));
+		testStatusHandlerForToEntity(spec.toEntityFlux(BodyExtractors.toFlux(String.class)));
+	}
+
+	private void testStatusHandlerForToEntity(Publisher<?> responsePublisher) {
+		StepVerifier.create(responsePublisher).expectError(WebClientResponseException.class).verify();
+	}
+
 
 	private ClientRequest verifyAndGetRequest() {
 		ClientRequest request = this.captor.getValue();

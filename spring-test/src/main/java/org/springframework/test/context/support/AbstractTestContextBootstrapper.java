@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2020 the original author or authors.
+ * Copyright 2002-2022 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -318,7 +318,8 @@ public abstract class AbstractTestContextBootstrapper implements TestContextBoot
 	 * should be built (must not be {@code null})
 	 * @param configAttributesList the list of context configuration attributes for the
 	 * specified test class, ordered <em>bottom-up</em> (i.e., as if we were
-	 * traversing up the class hierarchy); never {@code null} or empty
+	 * traversing up the class hierarchy and enclosing class hierarchy); never
+	 * {@code null} or empty
 	 * @param parentConfig the merged context configuration for the parent application
 	 * context in a context hierarchy, or {@code null} if there is no parent
 	 * @param cacheAwareContextLoaderDelegate the cache-aware context loader delegate to
@@ -352,8 +353,7 @@ public abstract class AbstractTestContextBootstrapper implements TestContextBoot
 				logger.trace(String.format("Processing locations and classes for context configuration attributes %s",
 						configAttributes));
 			}
-			if (contextLoader instanceof SmartContextLoader) {
-				SmartContextLoader smartContextLoader = (SmartContextLoader) contextLoader;
+			if (contextLoader instanceof SmartContextLoader smartContextLoader) {
 				smartContextLoader.processContextConfiguration(configAttributes);
 				locations.addAll(0, Arrays.asList(configAttributes.getLocations()));
 				classes.addAll(0, Arrays.asList(configAttributes.getClasses()));
@@ -431,7 +431,7 @@ public abstract class AbstractTestContextBootstrapper implements TestContextBoot
 	 * resolved; must not be {@code null}
 	 * @param configAttributesList the list of configuration attributes to process; must
 	 * not be {@code null}; must be ordered <em>bottom-up</em>
-	 * (i.e., as if we were traversing up the class hierarchy)
+	 * (i.e., as if we were traversing up the class hierarchy and enclosing class hierarchy)
 	 * @return the resolved {@code ContextLoader} for the supplied {@code testClass}
 	 * (never {@code null})
 	 * @throws IllegalStateException if {@link #getDefaultContextLoaderClass(Class)}
@@ -468,7 +468,7 @@ public abstract class AbstractTestContextBootstrapper implements TestContextBoot
 	 * </ol>
 	 * @param configAttributesList the list of configuration attributes to process;
 	 * must not be {@code null}; must be ordered <em>bottom-up</em>
-	 * (i.e., as if we were traversing up the class hierarchy)
+	 * (i.e., as if we were traversing up the class hierarchy and enclosing class hierarchy)
 	 * @return the {@code ContextLoader} class to use for the supplied configuration
 	 * attributes, or {@code null} if no explicit loader is found
 	 * @throws IllegalArgumentException if supplied configuration attributes are
