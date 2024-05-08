@@ -15,14 +15,12 @@
  */
 package org.springframework.cglib.beans;
 
-import org.springframework.cglib.core.CodeGenerationException;
-
 @SuppressWarnings({"rawtypes", "unchecked", "serial"})
 public class BulkBeanException extends RuntimeException
 {
     private int index;
     private Throwable cause;
-    
+
     public BulkBeanException(String message, int index) {
         super(message);
         this.index = index;
@@ -37,8 +35,9 @@ public class BulkBeanException extends RuntimeException
     public int getIndex() {
         return index;
     }
-    
-    public Throwable getCause() {
+
+    @Override
+	public Throwable getCause() {
         return cause;
     }
 }

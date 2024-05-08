@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2022 the original author or authors.
+ * Copyright 2002-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,10 +26,10 @@ import java.lang.annotation.Target;
 import org.springframework.core.annotation.AliasFor;
 
 /**
- * {@code ActiveProfiles} is a class-level annotation that is used to declare
- * which <em>active bean definition profiles</em> should be used when loading
- * an {@link org.springframework.context.ApplicationContext ApplicationContext}
- * for test classes.
+ * {@code ActiveProfiles} is an annotation that can be applied to a test class
+ * to declare which <em>active bean definition profiles</em> should be used when
+ * loading an {@link org.springframework.context.ApplicationContext ApplicationContext}
+ * for integration tests.
  *
  * <p>This annotation may be used as a <em>meta-annotation</em> to create custom
  * <em>composed annotations</em>.
@@ -78,7 +78,7 @@ public @interface ActiveProfiles {
 	Class<? extends ActiveProfilesResolver> resolver() default ActiveProfilesResolver.class;
 
 	/**
-	 * Whether or not bean definition profiles from superclasses and enclosing
+	 * Whether bean definition profiles from superclasses and enclosing
 	 * classes should be <em>inherited</em>.
 	 * <p>The default value is {@code true}, which means that a test class will
 	 * <em>inherit</em> bean definition profiles defined by a test superclass or

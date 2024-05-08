@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2022 the original author or authors.
+ * Copyright 2002-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,16 +22,17 @@ import org.springframework.core.NestedExceptionUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@SuppressWarnings("deprecation")
 public class NestedServletExceptionTests {
 
 	@Test
-	public void testNestedServletExceptionString() {
+	void testNestedServletExceptionString() {
 		NestedServletException exception = new NestedServletException("foo");
 		assertThat(exception.getMessage()).isEqualTo("foo");
 	}
 
 	@Test
-	public void testNestedServletExceptionStringThrowable() {
+	void testNestedServletExceptionStringThrowable() {
 		Throwable cause = new RuntimeException();
 		NestedServletException exception = new NestedServletException("foo", cause);
 		assertThat(exception.getMessage()).isEqualTo(NestedExceptionUtils.buildMessage("foo", cause));
@@ -39,7 +40,7 @@ public class NestedServletExceptionTests {
 	}
 
 	@Test
-	public void testNestedServletExceptionStringNullThrowable() {
+	void testNestedServletExceptionStringNullThrowable() {
 		// This can happen if someone is sloppy with Throwable causes...
 		NestedServletException exception = new NestedServletException("foo", null);
 		assertThat(exception.getMessage()).isEqualTo("foo");

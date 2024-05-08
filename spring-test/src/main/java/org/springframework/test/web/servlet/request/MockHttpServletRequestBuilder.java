@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2021 the original author or authors.
+ * Copyright 2002-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,8 +17,10 @@
 package org.springframework.test.web.servlet.request;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -40,6 +42,7 @@ import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.HttpMethod;
+import org.springframework.http.HttpOutputMessage;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.FormHttpMessageConverter;
 import org.springframework.lang.Nullable;
@@ -51,7 +54,6 @@ import org.springframework.util.Assert;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
 import org.springframework.util.ObjectUtils;
-import org.springframework.util.StreamUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.context.support.WebApplicationContextUtils;
@@ -105,6 +107,9 @@ public class MockHttpServletRequestBuilder
 	private MockHttpSession session;
 
 	@Nullable
+	private String remoteAddress;
+
+	@Nullable
 	private String characterEncoding;
 
 	@Nullable
@@ -118,6 +123,8 @@ public class MockHttpServletRequestBuilder
 	private final MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
 
 	private final MultiValueMap<String, String> queryParams = new LinkedMultiValueMap<>();
+
+	private final MultiValueMap<String, String> formFields = new LinkedMultiValueMap<>();
 
 	private final List<Cookie> cookies = new ArrayList<>();
 
@@ -148,9 +155,10 @@ public class MockHttpServletRequestBuilder
 
 	private static URI initUri(String url, Object[] vars) {
 		Assert.notNull(url, "'url' must not be null");
-		Assert.isTrue(url.startsWith("/") || url.startsWith("http://") || url.startsWith("https://"), "" +
-				"'url' should start with a path or be a complete HTTP URL: " + url);
-		return UriComponentsBuilder.fromUriString(url).buildAndExpand(vars).encode().toUri();
+		Assert.isTrue(url.isEmpty() || url.startsWith("/") || url.startsWith("http://") || url.startsWith("https://"),
+				() -> "'url' should start with a path or be a complete HTTP URL: " + url);
+		String uriString = (url.isEmpty() ? "/" : url);
+		return UriComponentsBuilder.fromUriString(uriString).buildAndExpand(vars).encode().toUri();
 	}
 
 	/**
@@ -306,7 +314,7 @@ public class MockHttpServletRequestBuilder
 
 	/**
 	 * Set the 'Content-Type' header of the request as a raw String value,
-	 * possibly not even well formed (for testing purposes).
+	 * possibly not even well-formed (for testing purposes).
 	 * @param contentType the content type
 	 * @since 4.1.2
 	 */
@@ -327,8 +335,8 @@ public class MockHttpServletRequestBuilder
 	}
 
 	/**
-	 * Set the 'Accept' header using raw String values, possibly not even well
-	 * formed (for testing purposes).
+	 * Set the {@code Accept} header using raw String values, possibly not even
+	 * well-formed (for testing purposes).
 	 * @param mediaTypes one or more media types; internally joined as
 	 * comma-separated String
 	 */
@@ -408,7 +416,7 @@ public class MockHttpServletRequestBuilder
 
 	/**
 	 * Append to the query string and also add to the
-	 * {@link #params(MultiValueMap)}  request parameters} map. The parameter
+	 * {@link #params(MultiValueMap) request parameters} map. The parameter
 	 * name and value are encoded when they are added to the query string.
 	 * @param params the parameters to add
 	 * @since 5.2.2
@@ -416,6 +424,30 @@ public class MockHttpServletRequestBuilder
 	public MockHttpServletRequestBuilder queryParams(MultiValueMap<String, String> params) {
 		params(params);
 		this.queryParams.addAll(params);
+		return this;
+	}
+
+	/**
+	 * Appends the given value(s) to the given form field and also add to the
+	 * {@link #param(String, String...) request parameters} map.
+	 * @param name the field name
+	 * @param values one or more values
+	 * @since 6.1.7
+	 */
+	public MockHttpServletRequestBuilder formField(String name, String... values) {
+		param(name, values);
+		this.formFields.addAll(name, Arrays.asList(values));
+		return this;
+	}
+
+	/**
+	 * Variant of {@link #formField(String, String...)} with a {@link MultiValueMap}.
+	 * @param formFields the form fields to add
+	 * @since 6.1.7
+	 */
+	public MockHttpServletRequestBuilder formFields(MultiValueMap<String, String> formFields) {
+		params(formFields);
+		this.formFields.addAll(formFields);
 		return this;
 	}
 
@@ -527,6 +559,17 @@ public class MockHttpServletRequestBuilder
 	}
 
 	/**
+	 * Set the remote address of the request.
+	 * @param remoteAddress the remote address (IP)
+	 * @since 6.0.10
+	 */
+	public MockHttpServletRequestBuilder remoteAddress(String remoteAddress) {
+		Assert.hasText(remoteAddress, "'remoteAddress' must not be null or blank");
+		this.remoteAddress = remoteAddress;
+		return this;
+	}
+
+	/**
 	 * An extension point for further initialization of {@link MockHttpServletRequest}
 	 * in ways not built directly into the {@code MockHttpServletRequestBuilder}.
 	 * Implementation of this interface can have builder-style methods themselves
@@ -583,6 +626,9 @@ public class MockHttpServletRequestBuilder
 		if (this.session == null) {
 			this.session = parentBuilder.session;
 		}
+		if (this.remoteAddress == null) {
+			this.remoteAddress = parentBuilder.remoteAddress;
+		}
 
 		if (this.characterEncoding == null) {
 			this.characterEncoding = parentBuilder.characterEncoding;
@@ -610,6 +656,12 @@ public class MockHttpServletRequestBuilder
 			String paramName = entry.getKey();
 			if (!this.queryParams.containsKey(paramName)) {
 				this.queryParams.put(paramName, entry.getValue());
+			}
+		}
+		for (Map.Entry<String, List<String>> entry : parentBuilder.formFields.entrySet()) {
+			String paramName = entry.getKey();
+			if (!this.formFields.containsKey(paramName)) {
+				this.formFields.put(paramName, entry.getValue());
 			}
 		}
 		for (Cookie cookie : parentBuilder.cookies) {
@@ -687,6 +739,9 @@ public class MockHttpServletRequestBuilder
 		if (this.principal != null) {
 			request.setUserPrincipal(this.principal);
 		}
+		if (this.remoteAddress != null) {
+			request.setRemoteAddr(this.remoteAddress);
+		}
 		if (this.session != null) {
 			request.setSession(this.session);
 		}
@@ -724,6 +779,24 @@ public class MockHttpServletRequestBuilder
 			}
 		});
 
+		if (!this.formFields.isEmpty()) {
+			if (this.content != null && this.content.length > 0) {
+				throw new IllegalStateException("Could not write form data with an existing body");
+			}
+			Charset charset = (this.characterEncoding != null
+					? Charset.forName(this.characterEncoding) : StandardCharsets.UTF_8);
+			MediaType mediaType = (request.getContentType() != null
+					? MediaType.parseMediaType(request.getContentType())
+					: new MediaType(MediaType.APPLICATION_FORM_URLENCODED, charset));
+			if (!mediaType.isCompatibleWith(MediaType.APPLICATION_FORM_URLENCODED)) {
+				throw new IllegalStateException("Invalid content type: '" + mediaType
+						+ "' is not compatible with '" + MediaType.APPLICATION_FORM_URLENCODED + "'");
+			}
+			request.setContent(writeFormData(mediaType, charset));
+			if (request.getContentType() == null) {
+				request.setContentType(mediaType.toString());
+			}
+		}
 		if (this.content != null && this.content.length > 0) {
 			String requestContentType = request.getContentType();
 			if (requestContentType != null) {
@@ -800,11 +873,37 @@ public class MockHttpServletRequestBuilder
 		}));
 	}
 
+	private byte[] writeFormData(MediaType mediaType, Charset charset) {
+		ByteArrayOutputStream out = new ByteArrayOutputStream();
+		HttpOutputMessage message = new HttpOutputMessage() {
+			@Override
+			public OutputStream getBody() {
+				return out;
+			}
+
+			@Override
+			public HttpHeaders getHeaders() {
+				HttpHeaders headers = new HttpHeaders();
+				headers.setContentType(mediaType);
+				return headers;
+			}
+		};
+		try {
+			FormHttpMessageConverter messageConverter = new FormHttpMessageConverter();
+			messageConverter.setCharset(charset);
+			messageConverter.write(this.formFields, mediaType, message);
+			return out.toByteArray();
+		}
+		catch (IOException ex) {
+			throw new IllegalStateException("Failed to write form data to request body", ex);
+		}
+	}
+
 	private MultiValueMap<String, String> parseFormData(MediaType mediaType) {
 		HttpInputMessage message = new HttpInputMessage() {
 			@Override
 			public InputStream getBody() {
-				return (content != null ? new ByteArrayInputStream(content) : StreamUtils.emptyInput());
+				return (content != null ? new ByteArrayInputStream(content) : InputStream.nullInputStream());
 			}
 			@Override
 			public HttpHeaders getHeaders() {

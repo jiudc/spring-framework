@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2022 the original author or authors.
+ * Copyright 2002-2024 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,20 +21,19 @@ import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.Arrays;
 import java.util.Collections;
 
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatExceptionOfType;
 import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
-import static org.springframework.web.util.UriComponentsBuilder.fromHttpUrl;
 import static org.springframework.web.util.UriComponentsBuilder.fromUriString;
 
 /**
- * Unit tests for {@link UriComponents}.
+ * Tests for {@link UriComponents}.
  *
  * @author Arjen Poutsma
  * @author Phillip Webb
@@ -76,30 +75,36 @@ class UriComponentsTests {
 	}
 
 	@Test
-	void toUriEncoded() throws URISyntaxException {
+	void toUriEncoded() {
 		UriComponents uri = UriComponentsBuilder.fromUriString("https://example.com/hotel list/Z\u00fcrich").build();
-		assertThat(uri.encode().toUri()).isEqualTo(new URI("https://example.com/hotel%20list/Z%C3%BCrich"));
+		assertThat(uri.encode().toUri()).isEqualTo(URI.create("https://example.com/hotel%20list/Z%C3%BCrich"));
 	}
 
 	@Test
-	void toUriNotEncoded() throws URISyntaxException {
+	void toUriNotEncoded() {
 		UriComponents uri = UriComponentsBuilder.fromUriString("https://example.com/hotel list/Z\u00fcrich").build();
-		assertThat(uri.toUri()).isEqualTo(new URI("https://example.com/hotel%20list/Z\u00fcrich"));
+		assertThat(uri.toUri()).isEqualTo(URI.create("https://example.com/hotel%20list/Z\u00fcrich"));
 	}
 
 	@Test
-	void toUriAlreadyEncoded() throws URISyntaxException {
+	void toUriAlreadyEncoded() {
 		UriComponents uri = UriComponentsBuilder.fromUriString("https://example.com/hotel%20list/Z%C3%BCrich").build(true);
-		assertThat(uri.encode().toUri()).isEqualTo(new URI("https://example.com/hotel%20list/Z%C3%BCrich"));
+		assertThat(uri.encode().toUri()).isEqualTo(URI.create("https://example.com/hotel%20list/Z%C3%BCrich"));
 	}
 
 	@Test
-	void toUriWithIpv6HostAlreadyEncoded() throws URISyntaxException {
+	void toUriWithIpv6HostAlreadyEncoded() {
 		UriComponents uri = UriComponentsBuilder.fromUriString(
 				"http://[1abc:2abc:3abc::5ABC:6abc]:8080/hotel%20list/Z%C3%BCrich").build(true);
 
 		assertThat(uri.encode().toUri()).isEqualTo(
-				new URI("http://[1abc:2abc:3abc::5ABC:6abc]:8080/hotel%20list/Z%C3%BCrich"));
+				URI.create("http://[1abc:2abc:3abc::5ABC:6abc]:8080/hotel%20list/Z%C3%BCrich"));
+	}
+
+	@Test
+	void toUriStringWithPortVariable() {
+		String url = "http://localhost:{port}/first";
+		assertThat(UriComponentsBuilder.fromUriString(url).build().toUriString()).isEqualTo(url);
 	}
 
 	@Test
@@ -154,10 +159,9 @@ class UriComponentsTests {
 
 	@Test  // gh-28521
 	void invalidPort() {
-		assertExceptionsForInvalidPort(fromUriString("https://example.com:XXX/bar").build());
+		assertThatExceptionOfType(InvalidUrlException.class)
+				.isThrownBy(() -> fromUriString("https://example.com:XXX/bar"));
 		assertExceptionsForInvalidPort(fromUriString("https://example.com/bar").port("XXX").build());
-		assertExceptionsForInvalidPort(fromHttpUrl("https://example.com:XXX/bar").build());
-		assertExceptionsForInvalidPort(fromHttpUrl("https://example.com/bar").port("XXX").build());
 	}
 
 	private void assertExceptionsForInvalidPort(UriComponents uriComponents) {
@@ -166,12 +170,6 @@ class UriComponentsTests {
 			.withMessage("The port must be an integer: XXX");
 		assertThatIllegalStateException()
 			.isThrownBy(uriComponents::toUri)
-			.withMessage("The port must be an integer: XXX");
-		assertThatIllegalStateException()
-			.isThrownBy(uriComponents::toUriString)
-			.withMessage("The port must be an integer: XXX");
-		assertThatIllegalStateException()
-			.isThrownBy(uriComponents::toString)
 			.withMessage("The port must be an integer: XXX");
 	}
 
@@ -244,7 +242,6 @@ class UriComponentsTests {
 		UriComponents uric2 = UriComponentsBuilder.fromUriString(baseUrl + "/foo/bar").build();
 		UriComponents uric3 = UriComponentsBuilder.fromUriString(baseUrl + "/foo/bin").build();
 
-		assertThat(uric1).isInstanceOf(OpaqueUriComponents.class);
 		assertThat(uric1).isEqualTo(uric1);
 		assertThat(uric1).isEqualTo(uric2);
 		assertThat(uric1).isNotEqualTo(uric3);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2002-2022 the original author or authors.
+ * Copyright 2002-2023 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -32,7 +32,7 @@ import org.springframework.aot.hint.TypeReference;
  * @author Sebastien Deleuze
  * @author Brian Clozel
  */
-public class ResourceHintsWriterTests {
+class ResourceHintsWriterTests {
 
 	@Test
 	void empty() throws JSONException {
@@ -49,8 +49,11 @@ public class ResourceHintsWriterTests {
 				{
 					"resources": {
 						"includes": [
-							{ "pattern": "\\\\Qcom/example/test.properties\\\\E"},
-							{ "pattern": "\\\\Qcom/example/another.properties\\\\E"}
+							{ "pattern": "\\\\Q/\\\\E" },
+							{ "pattern": "\\\\Qcom\\\\E"},
+							{ "pattern": "\\\\Qcom/example\\\\E"},
+							{ "pattern": "\\\\Qcom/example/another.properties\\\\E"},
+							{ "pattern": "\\\\Qcom/example/test.properties\\\\E"}
 						]
 					}
 				}""", hints);
@@ -64,7 +67,8 @@ public class ResourceHintsWriterTests {
 				{
 					"resources": {
 						"includes": [
-							{ "pattern": ".*\\\\Q.properties\\\\E"}
+							{ "pattern": ".*\\\\Q.properties\\\\E"},
+							{ "pattern": "\\\\Q\\/\\\\E"}
 						]
 					}
 				}""", hints);
@@ -78,6 +82,9 @@ public class ResourceHintsWriterTests {
 				{
 					"resources": {
 						"includes": [
+							{ "pattern": "\\\\Q/\\\\E" },
+							{ "pattern": "\\\\Qcom\\\\E"},
+							{ "pattern": "\\\\Qcom/example\\\\E"},
 							{ "pattern": "\\\\Qcom/example/\\\\E.*\\\\Q.properties\\\\E"}
 						]
 					}
@@ -92,6 +99,8 @@ public class ResourceHintsWriterTests {
 				{
 					"resources": {
 						"includes": [
+							{ "pattern": "\\\\Q/\\\\E" },
+							{ "pattern": "\\\\Qstatic\\\\E"},
 							{ "pattern": "\\\\Qstatic/\\\\E.*"}
 						]
 					}
@@ -107,7 +116,12 @@ public class ResourceHintsWriterTests {
 				{
 					"resources": {
 						"includes": [
+							{ "pattern": "\\\\Q/\\\\E"},
+							{ "pattern": "\\\\Qcom\\\\E"},
+							{ "pattern": "\\\\Qcom/example\\\\E"},
 							{ "pattern": "\\\\Qcom/example/\\\\E.*\\\\Q.properties\\\\E"},
+							{ "pattern": "\\\\Qorg\\\\E"},
+							{ "pattern": "\\\\Qorg/other\\\\E"},
 							{ "pattern": "\\\\Qorg/other/\\\\E.*\\\\Q.properties\\\\E"}
 						],
 						"excludes": [
@@ -126,6 +140,9 @@ public class ResourceHintsWriterTests {
 				{
 					"resources": {
 						"includes": [
+							{ "condition": { "typeReachable": "com.example.Test"}, "pattern": "\\\\Q/\\\\E"},
+							{ "condition": { "typeReachable": "com.example.Test"}, "pattern": "\\\\Qcom\\\\E"},
+							{ "condition": { "typeReachable": "com.example.Test"}, "pattern": "\\\\Qcom/example\\\\E"},
 							{ "condition": { "typeReachable": "com.example.Test"}, "pattern": "\\\\Qcom/example/test.properties\\\\E"}
 						]
 					}
@@ -140,7 +157,10 @@ public class ResourceHintsWriterTests {
 				{
 					"resources": {
 						"includes": [
-							{ "pattern": "\\\\Qjava/lang/String.class\\\\E"}
+							{ "pattern": "\\\\Q/\\\\E" },
+							{ "pattern": "\\\\Qjava\\\\E" },
+							{ "pattern": "\\\\Qjava/lang\\\\E" },
+							{ "pattern": "\\\\Qjava/lang/String.class\\\\E" }
 						]
 					}
 				}""", hints);
@@ -149,8 +169,8 @@ public class ResourceHintsWriterTests {
 	@Test
 	void registerResourceBundle() throws JSONException {
 		ResourceHints hints = new ResourceHints();
-		hints.registerResourceBundle("com.example.message");
 		hints.registerResourceBundle("com.example.message2");
+		hints.registerResourceBundle("com.example.message");
 		assertEquals("""
 				{
 					"bundles": [
@@ -164,7 +184,7 @@ public class ResourceHintsWriterTests {
 		StringWriter out = new StringWriter();
 		BasicJsonWriter writer = new BasicJsonWriter(out, "\t");
 		ResourceHintsWriter.INSTANCE.write(writer, hints);
-		JSONAssert.assertEquals(expectedString, out.toString(), JSONCompareMode.NON_EXTENSIBLE);
+		JSONAssert.assertEquals(expectedString, out.toString(), JSONCompareMode.STRICT);
 	}
 
 }
